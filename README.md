@@ -3,6 +3,9 @@
 3Dの七咲しほに、ことばでおねがいすると動いてくれる Web デモです。
 Unity（WebGL）で作っています。
 
+**あそぶ: https://kaazu.github.io/ShihoAgent/**
+（はじめての読み込みに少し時間がかかります。スマホでもあそべます）
+
 ## あそびかた
 - 画面下の入力欄に「ソファに行って」「おどって」「こっちきて」などと書いて送信
 - 例のボタンを押しても OK
@@ -18,4 +21,5 @@ Unity（WebGL）で作っています。
 ## クレジット
 - モデル: 七咲しほ（かずかず2021）
   - このリポジトリに含まれるモデルデータの再配布・改変はできません
+- フォント: M PLUS Rounded 1c（SIL Open Font License 1.1 / [licenses/M_PLUS_Rounded_1c-OFL.txt](licenses/M_PLUS_Rounded_1c-OFL.txt)）
 - 使用ツール: Unity 6 / UniVRM

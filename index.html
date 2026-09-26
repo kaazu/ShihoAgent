@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>七咲しほ と あそぼう</title>
+  <meta name="description" content="3Dの七咲しほに、ことばでおねがいすると動いてくれるWebデモ">
+  <style>
+    :root {
+      --bg: #fdf1f5;
+      --panel: #ffffff;
+      --ink: #5a2640;
+      --muted: #9a6b80;
+      --accent: #f07aa0;
+      --accent-ink: #ffffff;
+      --line: #f3c9d8;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+      font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Meiryo", "Yu Gothic UI", sans-serif; }
+    body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    #stage { position: relative; flex: 1; min-height: 0; }
+    #unity-canvas { width: 100%; height: 100%; display: block; background: #eee0e8; outline: none; }
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; background: var(--bg); transition: opacity .4s; }
+    #loading.hide { opacity: 0; pointer-events: none; }
+    #loading .title { font-size: 28px; font-weight: bold; letter-spacing: .1em; }
+    #loading .bar { width: min(280px, 70vw); height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+    #bar-fill { width: 0; height: 100%; background: var(--accent); transition: width .2s; }
+    #loading-text { font-size: 14px; color: var(--muted); }
+    #controls { background: var(--panel); border-top: 1px solid var(--line);
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+    #chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+    #chips::-webkit-scrollbar { display: none; }
+    .chip { flex: none; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+      border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+    .chip:hover { border-color: var(--accent); }
+    #cmd-form { display: flex; gap: 8px; }
+    #cmd { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 14px;
+      border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fff; }
+    #cmd:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #send { font: inherit; font-size: 16px; padding: 0 18px; border: 0; border-radius: 12px;
+      background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+    #send:disabled, .chip:disabled { opacity: .5; cursor: default; }
+    .credit { margin-top: 6px; font-size: 11px; color: var(--muted); text-align: right; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="loading">
+      <div class="title">七咲しほ</div>
+      <div class="bar"><div id="bar-fill"></div></div>
+      <div id="loading-text">よみこみ中…</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div id="chips">
+      <button class="chip" type="button">ソファに行って</button>
+      <button class="chip" type="button">おどって</button>
+      <button class="chip" type="button">こっちきて</button>
+      <button class="chip" type="button">本棚を見て</button>
+      <button class="chip" type="button">窓に行って</button>
+      <button class="chip" type="button">わらって</button>
+      <button class="chip" type="button">テーブルに行って</button>
+      <button class="chip" type="button">すきに あそんで</button>
+    </div>
+    <form id="cmd-form" autocomplete="off">
+      <input id="cmd" type="text" maxlength="100" enterkeyhint="send"
+             placeholder="しほに おねがいしてみよう（例: お花に行って）" aria-label="しほへのおねがい" disabled>
+      <button id="send" type="submit" disabled>送信</button>
+    </form>
+    <div class="credit">モデル: 七咲しほ（かずかず2021）/ Unity WebGL</div>
+  </div>
+
+  <script>
+    const canvas = document.querySelector("#unity-canvas");
+    const loading = document.querySelector("#loading");
+    const barFill = document.querySelector("#bar-fill");
+    const loadingText = document.querySelector("#loading-text");
+    const form = document.querySelector("#cmd-form");
+    const input = document.querySelector("#cmd");
+    const sendBtn = document.querySelector("#send");
+    const chips = document.querySelectorAll(".chip");
+    let unity = null;
+
+    // Unity はページ全体のキー入力を受け取ってしまうので、入力欄でのキー操作は Unity に渡さない。
+    // Unity より先に登録したいので、Unity を読み込む前にここで登録する
+    ["keydown", "keypress", "keyup"].forEach((type) => {
+      window.addEventListener(type, (e) => {
+        if (e.target !== input) return;
+        e.stopImmediatePropagation();
+        // 日本語入力の変換確定の Enter では送信しない
+        if (type === "keydown" && e.key === "Enter" && (e.isComposing || e.keyCode === 229)) e.preventDefault();
+      }, true);
+    });
+
+    function send(text) {
+      text = (text || "").trim();
+      if (!text || !unity) return;
+      unity.SendMessage("Shiho", "Submit", text);
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      send(input.value);
+      input.value = "";
+    });
+    chips.forEach((c) => c.addEventListener("click", () => send(c.textContent)));
+
+    const config = {
+      dataUrl: "Build/ShihoWeb.data.unityweb",
+      frameworkUrl: "Build/ShihoWeb.framework.js.unityweb",
+      codeUrl: "Build/ShihoWeb.wasm.unityweb",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "DefaultCompany",
+      productName: "My project (3)",
+      productVersion: "0.1.0",
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    };
+
+    const script = document.createElement("script");
+    script.src = "Build/ShihoWeb.loader.js";
+    script.onload = () => {
+      createUnityInstance(canvas, config, (p) => {
+        barFill.style.width = Math.round(p * 100) + "%";
+      }).then((instance) => {
+        unity = instance;
+        loading.classList.add("hide");
+        input.disabled = false;
+        sendBtn.disabled = false;
+        chips.forEach((c) => (c.disabled = false));
+      }).catch((err) => {
+        loadingText.textContent = "よみこみに しっぱいしました: " + err;
+      });
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
