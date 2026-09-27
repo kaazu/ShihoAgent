@@ -43,6 +43,18 @@
       background: var(--accent); color: var(--accent-ink); cursor: pointer; }
     #send:disabled, .chip:disabled { opacity: .5; cursor: default; }
     .credit { margin-top: 6px; font-size: 11px; color: var(--muted); text-align: right; }
+    #invite { flex: none; font: inherit; font-size: 15px; padding: 0 14px; border: 1px solid var(--accent);
+      border-radius: 12px; background: #fff; color: var(--accent); cursor: pointer; white-space: nowrap; }
+    #invite:disabled { opacity: .5; cursor: default; }
+    #invite-file { display: none; }
+    #invite .narrow { display: none; }
+    @media (max-width: 480px) {
+      #invite { padding: 0 10px; font-size: 14px; }
+      #invite .wide { display: none; }
+      #invite .narrow { display: inline; }
+      #send { padding: 0 14px; }
+    }
+    #note { margin-top: 6px; font-size: 12px; color: var(--muted); min-height: 1em; }
   </style>
 </head>
 <body>
@@ -65,12 +77,17 @@
       <button class="chip" type="button">わらって</button>
       <button class="chip" type="button">テーブルに行って</button>
       <button class="chip" type="button">すきに あそんで</button>
+      <button class="chip" type="button">みんなで おどって</button>
+      <button class="chip" type="button">みんなで こっちきて</button>
     </div>
     <form id="cmd-form" autocomplete="off">
       <input id="cmd" type="text" maxlength="100" enterkeyhint="send"
              placeholder="しほに おねがいしてみよう（例: お花に行って）" aria-label="しほへのおねがい" disabled>
       <button id="send" type="submit" disabled>送信</button>
+      <button id="invite" type="button" disabled title="手持ちの VRM ファイルを しほの おへやに よぶ"><span class="wide">ともだちを よぶ</span><span class="narrow">＋ともだち</span></button>
+      <input id="invite-file" type="file" accept=".vrm">
     </form>
+    <div id="note">「ともだちを よぶ」で手持ちの VRM（VRoid など）を えらぶと、しほの おへやに あそびに きます。ファイルは このブラウザの中だけで よみこみ、どこにも おくりません。</div>
     <div class="credit">モデル: 七咲しほ（かずかず2021）/ Unity WebGL</div>
   </div>
 
@@ -83,6 +100,10 @@
     const input = document.querySelector("#cmd");
     const sendBtn = document.querySelector("#send");
     const chips = document.querySelectorAll(".chip");
+    const inviteBtn = document.querySelector("#invite");
+    const inviteFile = document.querySelector("#invite-file");
+    const note = document.querySelector("#note");
+    const MAX_VRM_MB = 80;
     let unity = null;
 
     // Unity はページ全体のキー入力を受け取ってしまうので、入力欄でのキー操作は Unity に渡さない。
@@ -109,6 +130,20 @@
     });
     chips.forEach((c) => c.addEventListener("click", () => send(c.textContent)));
 
+    // ともだちを よぶ: えらんだ VRM をブラウザの中の URL（blob:）にして Unity に渡す。アップロードはしない
+    inviteBtn.addEventListener("click", () => inviteFile.click());
+    inviteFile.addEventListener("change", () => {
+      const file = inviteFile.files && inviteFile.files[0];
+      inviteFile.value = "";
+      if (!file || !unity) return;
+      if (!/\.vrm$/i.test(file.name)) { note.textContent = "VRM ファイル（.vrm）を えらんでね"; return; }
+      if (file.size > MAX_VRM_MB * 1024 * 1024) { note.textContent = `ファイルが大きすぎます（${MAX_VRM_MB}MB まで）`; return; }
+      const url = URL.createObjectURL(file);
+      unity.SendMessage("Shiho", "Invite", url + "|" + file.name.replace(/\|/g, ""));
+      note.textContent = `「${file.name}」を よんだよ（あらわれるまで すこし かかります）`;
+      // Unity が読み終わるまで URL は残しておく（ページを閉じると消える）
+    });
+
     const config = {
       dataUrl: "Build/ShihoWeb.data.unityweb",
       frameworkUrl: "Build/ShihoWeb.framework.js.unityweb",
@@ -130,6 +165,7 @@
         loading.classList.add("hide");
         input.disabled = false;
         sendBtn.disabled = false;
+        inviteBtn.disabled = false;
         chips.forEach((c) => (c.disabled = false));
       }).catch((err) => {
         loadingText.textContent = "よみこみに しっぱいしました: " + err;
